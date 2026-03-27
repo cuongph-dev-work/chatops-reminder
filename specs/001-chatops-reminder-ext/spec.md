@@ -5,6 +5,16 @@
 **Status**: Draft  
 **Input**: User description: "Xây dựng Chrome Extension giúp người dùng tạo nhắc nhở (reminder) trực tiếp từ tin nhắn trên Mattermost, quản lý reminder qua popup, nhận thông báo hệ thống với snooze/recurring support."
 
+## Clarifications
+
+### Session 2026-03-27
+
+- Q: What happens to a reminder after its notification fires and the user interacts with it? → A: Move to "Completed" tab — reminder stays in storage, shown in a separate "Completed" section in the popup, clearable manually by the user.
+- Q: Can a reminder have one tag or multiple tags? → A: Multiple tags — each reminder can have zero or more tags, displayed as multiple colored badges.
+- Q: Does the extension work on any Mattermost instance or a specific pre-configured URL? → A: Any Mattermost instance — the extension auto-detects Mattermost pages by URL pattern or DOM markers, no configuration needed.
+- Q: What language should the extension UI use? → A: Bilingual — support both English and Vietnamese with a language toggle in settings.
+- Q: How long are completed reminders retained before cleanup? → A: Auto-purge completed reminders older than 30 days.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Quick Reminder from Chat Message (Priority: P1)
@@ -111,7 +121,7 @@ The user creates a reminder with a recurring schedule (daily, weekly on a specif
 - **FR-002**: System MUST detect when the Mattermost message action menu opens and inject the button dynamically.
 - **FR-003**: System MUST display a modal form overlay (isolated from the host page styles) when the "Remind Me" button is clicked.
 - **FR-004**: System MUST automatically extract and pre-fill the message permalink into the reminder form.
-- **FR-005**: System MUST allow users to input a title, date/time, pre-reminder offset, tags with colors, and recurring schedule when creating a reminder.
+- **FR-005**: System MUST allow users to input a title, date/time, pre-reminder offset, one or more tags with colors, and recurring schedule when creating a reminder.
 - **FR-006**: System MUST validate that the selected reminder time is in the future before saving.
 - **FR-007**: System MUST persist all reminder data locally within the extension, ensuring data syncs between the in-page reminder creation and the popup management views in real-time.
 - **FR-008**: System MUST schedule background alarms for each reminder at the specified time (or pre-reminder offset time).
@@ -126,11 +136,16 @@ The user creates a reminder with a recurring schedule (daily, weekly on a specif
 - **FR-017**: System MUST provide a tag management interface allowing users to create, edit, and delete tags with associated colors.
 - **FR-018**: System MUST request notification permissions from the user if not already granted.
 - **FR-019**: System MUST provide pre-reminder options: On time, 5 minutes, 10 minutes, 15 minutes, and 30 minutes before the scheduled time.
+- **FR-020**: System MUST move fired reminders to a "Completed" section in the popup after the notification fires (or after the snooze chain ends), keeping them accessible for review and allowing users to manually clear them.
+- **FR-021**: System MUST auto-detect Mattermost web pages (by URL pattern or DOM markers) and activate the "Remind Me" injection on any Mattermost instance without requiring user configuration.
+- **FR-022**: System MUST support bilingual UI in English and Vietnamese, with all labels, notifications, and messages available in both languages.
+- **FR-023**: System MUST provide a language toggle in extension settings allowing the user to switch between English and Vietnamese. The default language should follow the browser's locale (Vietnamese if locale is `vi`, English otherwise).
+- **FR-024**: System MUST automatically purge completed reminders that are older than 30 days to prevent unbounded storage growth.
 
 ### Key Entities
 
-- **Reminder**: Represents a scheduled notification. Key attributes: title, message link, scheduled date/time, pre-reminder offset, tag reference, recurrence rule, creation timestamp, status (pending/completed/snoozed).
-- **Tag**: Represents a categorization label. Key attributes: name, display color. A tag can be associated with zero or more reminders.
+- **Reminder**: Represents a scheduled notification. Key attributes: title, message link, scheduled date/time, pre-reminder offset, tag references (zero or more), recurrence rule, creation timestamp, status (pending/snoozed/completed). Lifecycle: pending → snoozed (if user snoozes) → pending (after snooze fires) → completed (after final notification fires or snooze chain ends). Completed reminders are shown in a separate "Completed" tab, can be manually cleared, and are auto-purged after 30 days.
+- **Tag**: Represents a categorization label. Key attributes: name, display color. A tag can be associated with zero or more reminders, and a reminder can have zero or more tags.
 - **Notification Event**: Represents a fired notification instance. Key attributes: associated reminder, fire time, user action taken (clicked/snoozed/dismissed).
 
 ## Success Criteria *(mandatory)*
@@ -148,7 +163,7 @@ The user creates a reminder with a recurring schedule (daily, weekly on a specif
 
 - Users have a modern Chromium-based browser installed and updated.
 - Users access Mattermost via the web interface (not the desktop app).
-- The Mattermost web interface uses a consistent DOM structure for message action menus across supported versions.
+- The Mattermost web interface uses a consistent DOM structure for message action menus across supported versions; the extension auto-detects any Mattermost instance without configuration.
 - Local extension storage provides sufficient capacity for the expected number of reminders (typically under 1,000 active reminders per user).
 - Users have a stable internet connection for accessing Mattermost message links when clicking notifications.
 - Mobile support and cross-browser support (Firefox, Safari) are out of scope for v1.
