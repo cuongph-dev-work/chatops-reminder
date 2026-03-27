@@ -84,37 +84,74 @@ function CustomNotification({
     handleDismiss()
   }
 
-  return (
-    <div className="w-[420px] max-w-[calc(100vw-48px)] animate-in fade-in slide-in-from-top-6 duration-300 drop-shadow-2xl pointer-events-auto shrink-0">
-      <div className="bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200/60 ring-1 ring-black/5">
-        <div className="flex p-5 gap-4 items-start relative">
-          <button
-            onClick={handleIgnore}
-            className="absolute top-2 right-2 p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
-            aria-label="Close"
-          >
-            <MdClose size={18} />
-          </button>
+  // Format relative time for "Just now", "Xm ago", etc.
+  function formatRelativeTime(): string {
+    const now = Date.now()
+    const created = new Date(reminder.createdAt).getTime()
+    const diffMs = now - created
+    const diffMin = Math.floor(diffMs / 60000)
+    if (diffMin < 1) return "Just now"
+    if (diffMin < 60) return `${diffMin}m ago`
+    const diffHr = Math.floor(diffMin / 60)
+    if (diffHr < 24) return `${diffHr}h ago`
+    return `${Math.floor(diffHr / 24)}d ago`
+  }
 
+  return (
+    <div className="w-[460px] max-w-[calc(100vw-48px)] drop-shadow-2xl pointer-events-auto shrink-0">
+      <div className="bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-slate-200/60 ring-1 ring-black/5 border-l-[5px] border-l-blue-500">
+        {/* Header: Label + Timestamp + Close */}
+        <div className="flex items-center justify-between px-5 pt-4 pb-1">
+          <span className="text-[11px] font-bold tracking-widest uppercase text-blue-600">
+            Active Reminder
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-slate-400 font-medium">
+              {formatRelativeTime()}
+            </span>
+            <button
+              onClick={handleIgnore}
+              className="p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
+              aria-label="Close"
+            >
+              <MdClose size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Body: Icon + Content */}
+        <div className="flex px-5 pb-4 gap-4 items-start">
           {/* Icon Block */}
-          <div className="flex-shrink-0 w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-inner mt-0.5 shadow-blue-600/20">
-            <MdAlarm className="text-white text-3xl" />
+          <div className="flex-shrink-0 w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mt-0.5">
+            <MdAlarm className="text-blue-600 text-2xl" />
           </div>
 
           {/* Content */}
-          <div className="flex-1 min-w-0 pr-5">
-            <h3 className="text-[17px] font-bold text-slate-800 leading-tight mb-2 tracking-tight line-clamp-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-[16px] font-bold text-slate-800 leading-snug mb-1 tracking-tight line-clamp-2">
               {reminder.title}
             </h3>
 
-            {reminder.description && (
-              <p className="text-[14px] text-slate-500 leading-snug line-clamp-3 mb-2">
+            {/* Source site subtitle */}
+            {reminder.sourceSiteName && (
+              <p className="text-[13px] leading-snug mb-2">
+                <span className="font-semibold text-emerald-600">{reminder.sourceSiteName}</span>
+                {reminder.description && (
+                  <span className="text-slate-500">: {reminder.description}</span>
+                )}
+              </p>
+            )}
+
+            {/* Description when no source site */}
+            {!reminder.sourceSiteName && reminder.description && (
+              <p className="text-[13px] text-slate-500 leading-snug line-clamp-3 mb-2">
                 {reminder.description}
               </p>
             )}
 
+            {/* Tags */}
             {reminder.tagIds && reminder.tagIds.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1.5 mt-1">
                 {reminder.tagIds.map(tagId => {
                   const tag = tags.find(x => x.id === tagId)
                   if (!tag) return null
@@ -130,39 +167,32 @@ function CustomNotification({
                 })}
               </div>
             )}
-
-            {reminder.sourceSiteName && (
-              <p className="text-[12px] text-slate-400 mt-1.5 flex items-center gap-1">
-                <span className="font-medium text-slate-500">From:</span> {reminder.sourceSiteName}
-              </p>
-            )}
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex border-t border-slate-100 bg-slate-50">
+        <div className="flex items-center gap-3 px-5 pb-4">
           {reminder.messageLink && (
             <button
               onClick={handleView}
-              className="flex-1 py-3.5 px-4 flex items-center justify-center gap-2.5 text-[14px] font-semibold text-blue-600 hover:bg-blue-50 transition-colors border-r border-slate-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+              className="flex items-center justify-center gap-2 px-5 py-2.5 text-[13px] font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
             >
-              <MdOpenInNew size={18} />
+              <MdOpenInNew size={16} />
               View in Chat
             </button>
           )}
           <button
             onClick={handleSnooze}
-            className="flex-1 py-3.5 px-4 flex items-center justify-center gap-2.5 text-[14px] font-semibold text-slate-600 hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-slate-400"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-semibold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-1"
           >
-            <MdSnooze size={18} />
+            <MdSnooze size={16} />
             Snooze 5m
           </button>
           <button
             onClick={handleDismiss}
-            className="flex-1 py-3.5 px-4 flex items-center justify-center gap-2.5 text-[14px] font-bold text-emerald-600 hover:bg-emerald-50 transition-colors border-l border-slate-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-500"
+            className="ml-auto text-[13px] font-medium text-slate-500 hover:text-slate-700 transition-colors px-3 py-2.5 focus:outline-none"
           >
-            <MdCheck size={18} />
-            OK
+            Dismiss
           </button>
         </div>
 
