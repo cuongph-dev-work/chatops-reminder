@@ -13,6 +13,7 @@ interface ReminderListProps {
   tags: Tag[]
   onUpdate: (id: string, updates: Partial<Reminder>) => Promise<unknown>
   onDelete: (id: string) => Promise<unknown>
+  onEdit?: (reminder: Reminder) => void
   emptyMessage?: string
 }
 
@@ -30,7 +31,7 @@ function sortReminders(reminders: Reminder[], mode: SortMode, tags: Tag[]): Remi
   return sorted
 }
 
-export function ReminderList({ reminders, tags, onUpdate, onDelete, emptyMessage }: ReminderListProps) {
+export function ReminderList({ reminders, tags, onUpdate, onDelete, onEdit, emptyMessage }: ReminderListProps) {
   const { t } = useI18n()
   const [sortMode, setSortMode] = useState<SortMode>("time")
 
@@ -76,6 +77,7 @@ export function ReminderList({ reminders, tags, onUpdate, onDelete, emptyMessage
               tags={tags}
               onUpdate={onUpdate}
               onDelete={onDelete}
+              onEdit={onEdit}
             />
           ))}
         </div>

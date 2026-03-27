@@ -7,7 +7,8 @@ import {
   clearCompletedReminders,
   deleteReminder,
   getReminderById,
-  updateReminder
+  updateReminder,
+  upsertSiteMapping
 } from "~shared/storage"
 import {
   PRE_REMINDER_VALUES,
@@ -53,20 +54,39 @@ async function handleCreate(
   if (err) return { success: false, error: err }
 
   const now = new Date().toISOString()
-  const reminder: Reminder = {
-    id: crypto.randomUUID(),
-    title: payload.title.trim(),
-    messageLink: payload.messageLink,
-    scheduledAt: payload.scheduledAt,
-    preReminderMinutes: payload.preReminderMinutes,
-    tagIds: payload.tagIds ?? [],
-    recurrence: payload.recurrence ?? null,
-    status: "pending",
-    createdAt: now,
-    completedAt: null,
-    snoozedUntil: null,
-    sourceInstanceUrl: payload.messageLink ? new URL(payload.messageLink).origin : undefined
-  }
+
+    // Resolve site mapping from messageLink
+    let sourceSiteName: string | undefined
+    let sourcePageTitle: string | undefined = payload.sourcePageTitle
+    if (payload.messageLink) {
+      try {
+        const url = new URL(payload.messageLink)
+        const domain = url.hostname
+        const displayName = sourcePageTitle || domain
+        const mapping = await upsertSiteMapping(domain, displayName, true)
+        sourceSiteName = mapping.name
+      } catch {
+        // Invalid URL, skip site mapping
+      }
+    }
+
+    const reminder: Reminder = {
+      id: crypto.randomUUID(),
+      title: payload.title.trim(),
+      messageLink: payload.messageLink,
+      scheduledAt: payload.scheduledAt,
+      preReminderMinutes: payload.preReminderMinutes,
+      tagIds: payload.tagIds ?? [],
+      recurrence: payload.recurrence ?? null,
+      status: "pending",
+      createdAt: now,
+      completedAt: null,
+      snoozedUntil: null,
+      sourceInstanceUrl: payload.messageLink ? new URL(payload.messageLink).origin : undefined,
+      description: payload.description,
+      sourceSiteName,
+      sourcePageTitle
+    }
 
   try {
     await addReminder(reminder)
@@ -91,12 +111,20 @@ async function handleUpdate(
   const updated: Reminder = {
     ...existing,
     ...(payload.title !== undefined ? { title: payload.title.trim() } : {}),
-    ...(payload.scheduledAt !== undefined ? { scheduledAt: payload.scheduledAt } : {}),
+    ...(payload.messageLink !== undefined ? { messageLink: payload.messageLink } : {}),
+    ...(payload.scheduledAt !== undefined ? { 
+          scheduledAt: payload.scheduledAt,
+          status: "pending",
+          completedAt: null,
+          snoozedUntil: null,
+          hasAutoSnoozed: false
+        } : {}),
     ...(payload.preReminderMinutes !== undefined
       ? { preReminderMinutes: payload.preReminderMinutes }
       : {}),
     ...(payload.tagIds !== undefined ? { tagIds: payload.tagIds } : {}),
-    ...(payload.recurrence !== undefined ? { recurrence: payload.recurrence } : {})
+    ...(payload.recurrence !== undefined ? { recurrence: payload.recurrence } : {}),
+    ...(payload.description !== undefined ? { description: payload.description } : {})
   }
 
   try {
@@ -156,6 +184,8 @@ export function setupMessageHandler(): void {
           break
         case "SNOOZE_NOTIFICATION":
         case "DISMISS_NOTIFICATION":
+        case "IGNORE_NOTIFICATION":
+        case "OPEN_POPUP_WITH_REMINDER":
           // Handled in src/background/index.ts
           return false
         default: {

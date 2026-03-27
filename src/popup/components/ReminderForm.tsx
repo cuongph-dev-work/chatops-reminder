@@ -1,26 +1,34 @@
 import React, { useState, useRef, useEffect } from "react"
 import { useI18n } from "~shared/i18n/index"
-import { MdClose } from "react-icons/md"
-import type { CreateReminderPayload, RecurrenceRule, BackgroundResponse } from "~shared/types"
+import { MdClose, MdOutlineAccessTime, MdLabelOutline } from "react-icons/md"
+import type { CreateReminderPayload, RecurrenceRule, BackgroundResponse, Tag, Reminder } from "~shared/types"
 import { DAYS_OF_WEEK, PRE_REMINDER_OPTIONS, RECURRENCE_TYPES } from "~shared/constants"
 import Select from "react-select"
-import DatePicker from "react-datepicker"
-import "react-datepicker/dist/react-datepicker.css"
 
 interface ReminderFormProps {
+  tags: Tag[]
+  initialReminder?: Reminder
+  defaultLink?: string
+  defaultSiteTitle?: string
   onCancel: () => void
 }
 
-export function ReminderForm({ onCancel }: ReminderFormProps) {
+export function ReminderForm({ tags, initialReminder, defaultLink, defaultSiteTitle, onCancel }: ReminderFormProps) {
   const { t } = useI18n()
   
-  const [title, setTitle] = useState("")
-  const [scheduledAt, setScheduledAt] = useState<Date | null>(null)
-  const [messageLink, setMessageLink] = useState("")
-  const [preReminderMinutes, setPreReminderMinutes] = useState<0 | 5 | 10 | 15 | 30>(0)
-  const [recurrenceType, setRecurrenceType] = useState<"none" | "daily" | "weekly" | "monthly">("none")
-  const [dayOfWeek, setDayOfWeek] = useState(1)
-  const [dayOfMonth, setDayOfMonth] = useState(1)
+  const [title, setTitle] = useState(initialReminder?.title || "")
+  const [description, setDescription] = useState(initialReminder?.description || "")
+  const [scheduledAt, setScheduledAt] = useState(() => {
+    if (!initialReminder?.scheduledAt) return ""
+    const d = new Date(initialReminder.scheduledAt)
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+  })
+  const [messageLink, setMessageLink] = useState(initialReminder?.messageLink || defaultLink || "")
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>(initialReminder?.tagIds || [])
+  const [preReminderMinutes, setPreReminderMinutes] = useState<0 | 5 | 10 | 15 | 30>(initialReminder?.preReminderMinutes || 0)
+  const [recurrenceType, setRecurrenceType] = useState<"none" | "daily" | "weekly" | "monthly">(initialReminder?.recurrence?.type || "none")
+  const [dayOfWeek, setDayOfWeek] = useState(initialReminder?.recurrence?.dayOfWeek || 1)
+  const [dayOfMonth, setDayOfMonth] = useState(initialReminder?.recurrence?.dayOfMonth || 1)
   
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -44,28 +52,41 @@ export function ReminderForm({ onCancel }: ReminderFormProps) {
     if (!title.trim()) { setError(t("error_title_required")); return }
     if (title.length > 200) { setError(t("error_title_too_long")); return }
     if (!scheduledAt) { setError(t("error_datetime_required")); return }
-    if (scheduledAt <= new Date()) { setError(t("error_datetime_past")); return }
+    if (new Date(scheduledAt) <= new Date()) { setError(t("error_datetime_past")); return }
 
     setSaving(true)
     const payload: CreateReminderPayload = {
       title: title.trim(),
       messageLink: messageLink.trim() || undefined, // Optional link
-      scheduledAt: scheduledAt.toISOString(),
+      scheduledAt: new Date(scheduledAt).toISOString(),
       preReminderMinutes,
-      tagIds: [],
-      recurrence: buildRecurrence()
+      tagIds: selectedTagIds,
+      recurrence: buildRecurrence(),
+      description: description.trim() || undefined,
+      sourcePageTitle: defaultSiteTitle || undefined
     }
 
     try {
-      const response = await chrome.runtime.sendMessage({
-        type: "CREATE_REMINDER",
-        payload
-      }) as BackgroundResponse
-
-      if (response.success) {
-        onCancel()
+      if (initialReminder) {
+        const response = await chrome.runtime.sendMessage({
+          type: "UPDATE_REMINDER",
+          payload: { id: initialReminder.id, ...payload }
+        }) as BackgroundResponse
+        if (response.success) {
+          onCancel()
+        } else {
+          setError("error" in response ? response.error : "Failed to update reminder")
+        }
       } else {
-        setError("error" in response ? response.error : "Failed to save reminder")
+        const response = await chrome.runtime.sendMessage({
+          type: "CREATE_REMINDER",
+          payload
+        }) as BackgroundResponse
+        if (response.success) {
+          onCancel()
+        } else {
+          setError("error" in response ? response.error : "Failed to save reminder")
+        }
       }
     } catch (e) {
       if (String(e).includes("QUOTA")) {
@@ -81,7 +102,7 @@ export function ReminderForm({ onCancel }: ReminderFormProps) {
   return (
     <div className="flex-1 flex flex-col p-5 overflow-y-auto">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-800">New Reminder</h2>
+        <h2 className="text-xl font-bold text-gray-800">{initialReminder ? "Edit Reminder" : "New Reminder"}</h2>
         <button
           onClick={onCancel}
           className="text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 p-1 transition-colors"
@@ -109,25 +130,33 @@ export function ReminderForm({ onCancel }: ReminderFormProps) {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
+            Description (Optional)
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+            placeholder="Add some details..."
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+            <MdOutlineAccessTime className="text-blue-500" />
             {t("label_datetime")} <span className="text-red-500">*</span>
           </label>
-          <DatePicker
-            selected={scheduledAt}
-            onChange={(date: Date | null) => setScheduledAt(date)}
-            showTimeSelect
-            timeFormat="HH:mm"
-            timeIntervals={15}
-            timeCaption="time"
-            dateFormat="MMMM d, yyyy h:mm aa"
-            placeholderText="Select date and time"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            wrapperClassName="w-full"
+          <input
+            type="datetime-local"
+            value={scheduledAt}
+            onChange={(e) => setScheduledAt(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm transition-all"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Mattermost Link (Optional)
+            Link (Optional)
           </label>
           <input
             type="url"
@@ -138,6 +167,29 @@ export function ReminderForm({ onCancel }: ReminderFormProps) {
           />
         </div>
 
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+            <MdLabelOutline className="text-blue-500" />
+            Tags
+          </label>
+          <Select
+            isMulti
+            value={tags.filter(t => selectedTagIds.includes(t.id)).map(t => ({ value: t.id, label: t.name, color: t.color }))}
+            onChange={(options) => setSelectedTagIds(options.map(o => o.value))}
+            options={tags.map(t => ({ value: t.id, label: t.name, color: t.color }))}
+            placeholder="Select tags..."
+            className="text-sm"
+            styles={{
+              control: (base) => ({ ...base, borderRadius: '0.5rem', borderColor: '#d1d5db', padding: '2px' }),
+              multiValue: (base, state) => ({ ...base, backgroundColor: state.data.color + '20', borderRadius: '4px' }),
+              multiValueLabel: (base, state) => ({ ...base, color: state.data.color, fontWeight: 600 }),
+              multiValueRemove: (base, state) => ({ ...base, color: state.data.color, ':hover': { backgroundColor: state.data.color, color: 'white' } })
+            }}
+            menuPlacement="auto"
+          />
+        </div>
+
+        <div className="pt-2">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -194,6 +246,7 @@ export function ReminderForm({ onCancel }: ReminderFormProps) {
             />
           </div>
         )}
+        </div>
 
         {error && (
           <p className="text-sm text-red-600 bg-red-50 rounded px-3 py-2">{error}</p>

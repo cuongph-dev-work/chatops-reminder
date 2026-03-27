@@ -30,7 +30,9 @@ export const DAYS_OF_WEEK = [
 export const STORAGE_KEYS = {
   REMINDERS: "reminders",
   TAGS: "tags",
-  SETTINGS: "settings"
+  SETTINGS: "settings",
+  SITE_MAPPINGS: "siteMappings",
+  PENDING_REMINDER: "pendingReminder"
 } as const
 
 export const MESSAGE_TYPES = {
@@ -65,7 +67,9 @@ export const MATTERMOST_PATTERNS = {
 export const DEFAULTS = {
   LANGUAGE: "en" as const,
   PRE_REMINDER_MINUTES: 0 as const,
-  RECURRENCE: null
+  RECURRENCE: null,
+  AUTO_SNOOZE: true,
+  AUTO_SNOOZE_MINUTES: 5
 }
 
 export const VALIDATION = {

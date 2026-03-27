@@ -59,46 +59,43 @@ function injectRemindMeButton(menu: Element, triggerElement: Element): void {
 
   const permalink = extractPermalink(triggerElement)
 
+  // Use Mattermost's native menu item structure: <li class="MenuItem"><button>...</button></li>
+  const li = document.createElement("li")
+  li.className = "MenuItem"
+  li.setAttribute("role", "presentation")
+
   const btn = document.createElement("button")
-  btn.className = REMIND_ME_BTN_CLASS
-  btn.setAttribute("role", "menuitem")
-  btn.style.cssText = `
-    display: flex;
-    align-items: center;
-    width: 100%;
-    padding: 6px 16px;
-    font-size: 14px;
-    color: inherit;
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    gap: 8px;
-  `
-  btn.innerHTML = `
-    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="1.2em" width="1.2em" xmlns="http://www.w3.org/2000/svg">
-      <path fill="none" d="M0 0h24v24H0z"></path>
-      <path d="M12 20a7 7 0 1 0 0-14 7 7 0 0 0 0 14zm0 2a9 9 0 1 1 0-18 9 9 0 0 1 0 18zm-.25-16h1.5v5l3.6 2.1-.75 1.2-4.35-2.55V6zM17 3.3l1.8-1.5 2.15 2.5-1.8 1.5L17 3.3zm-10-1.5L8.8 3.3 5.4 1.8 3.25 4.3 5.4 5.8 7 3.3z"></path>
-    </svg>
-    <span>Remind Me</span>
-  `
+  btn.className = `${REMIND_ME_BTN_CLASS} style--none`
+  btn.setAttribute("role", "presentation")
+  btn.innerHTML = `<i class="fa fa-clock-o" style="margin-right: 10px; color: var(--button-bg); position: relative;"></i>Remind Me`
 
   btn.addEventListener("click", (e) => {
     e.preventDefault()
     e.stopPropagation()
 
-    // Close the dropdown
-    menu.remove()
+    // Close the dropdown by clicking outside — avoids React DOM conflicts
+    document.body.click()
 
-    // Open reminder modal
-    const event = new CustomEvent("chatops:open-reminder-modal", {
-      detail: { messageLink: permalink ?? window.location.href }
+    // Store pending reminder data and notify background to open popup
+    const pendingData = {
+      link: permalink ?? window.location.href,
+      pageTitle: document.title
+    }
+    chrome.storage.local.set({ pendingReminder: pendingData }, () => {
+      chrome.runtime.sendMessage({
+        type: "OPEN_POPUP_WITH_REMINDER",
+        payload: pendingData
+      }).catch(() => {
+        // Background may not respond, that's ok — badge will guide user
+      })
     })
-    document.dispatchEvent(event)
   })
 
-  // Insert as first or last item
-  menu.appendChild(btn)
+  li.appendChild(btn)
+
+  // Find the menu list container (ul or the menu body itself)
+  const menuList = menu.querySelector("ul, .Menu__content, [role='menu']") || menu
+  menuList.appendChild(li)
 }
 
 // Set up MutationObserver to detect dynamically-added dropdown menus
@@ -147,7 +144,20 @@ function setupObserver(): void {
 if (isMattermostPage()) {
   if (document.body) {
     setupObserver()
+
+    // Capture right-clicked post permalink for context menu integration
+    document.addEventListener("contextmenu", (e) => {
+      const target = e.target as Element
+      if (!target) return
+      const permalink = extractPermalink(target)
+      // Store the permalink so background's context menu handler can use it
+      chrome.storage.local.set({
+        contextMenuPermalink: permalink ?? window.location.href,
+        contextMenuPageTitle: document.title
+      })
+    })
   } else {
     document.addEventListener("DOMContentLoaded", setupObserver)
   }
 }
+

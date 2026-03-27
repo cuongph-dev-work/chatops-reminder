@@ -13,6 +13,7 @@ interface ReminderCardProps {
   tags: Tag[]
   onUpdate: (id: string, updates: Partial<Reminder>) => Promise<unknown>
   onDelete: (id: string) => Promise<unknown>
+  onEdit?: (reminder: Reminder) => void
 }
 
 function formatDateTime(iso: string): string {
@@ -36,27 +37,12 @@ function recurrenceLabel(reminder: Reminder): string | null {
   }
 }
 
-export function ReminderCard({ reminder, tags, onUpdate, onDelete }: ReminderCardProps) {
+export function ReminderCard({ reminder, tags, onUpdate, onDelete, onEdit }: ReminderCardProps) {
   const { t } = useI18n()
-  const [editing, setEditing] = useState(false)
-  const [editTitle, setEditTitle] = useState(reminder.title)
-  const [editAt, setEditAt] = useState(
-    reminder.scheduledAt ? reminder.scheduledAt.slice(0, 16) : ""
-  )
-  const [saving, setSaving] = useState(false)
-
   const reminderTags = tags.filter((tag) => reminder.tagIds.includes(tag.id))
   const recLabel = recurrenceLabel(reminder)
 
-  async function handleSave() {
-    setSaving(true)
-    await onUpdate(reminder.id, {
-      title: editTitle,
-      scheduledAt: new Date(editAt).toISOString()
-    })
-    setSaving(false)
-    setEditing(false)
-  }
+  const isPastDue = new Date(reminder.scheduledAt).getTime() <= Date.now()
 
   // const statusColor = {
   //   pending: "border-l-blue-500",
@@ -66,53 +52,24 @@ export function ReminderCard({ reminder, tags, onUpdate, onDelete }: ReminderCar
 
   return (
     <div className="bg-white rounded-[14px] shadow-sm p-4 pt-3.5 space-y-2 relative group flex flex-col hover:shadow-md transition-shadow border border-gray-100">
-      {editing ? (
-        <div className="space-y-2">
-          <input
-            value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <input
-            type="datetime-local"
-            value={editAt}
-            onChange={(e) => setEditAt(e.target.value)}
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="text-[12px] bg-blue-600 font-semibold text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
-            >
-              {saving ? "…" : "Save"}
-            </button>
-            <button
-              onClick={() => setEditing(false)}
-              className="text-[12px] font-medium text-slate-500 px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : (
         <>
           {/* Hover Action Row (Absolute positioned) */}
           <div className="absolute inset-x-0 inset-y-0 bg-white/90 backdrop-blur-[1px] rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 z-10 pointer-events-none group-hover:pointer-events-auto">
             {reminder.status !== "completed" && (
               <>
                 <button
-                  onClick={() => setEditing(true)}
+                  onClick={() => onEdit?.(reminder)}
                   className="w-9 h-9 flex items-center justify-center bg-blue-100 text-blue-600 rounded-full hover:bg-blue-200 transition-colors shadow-sm"
                   title="Edit"
                 ><MdEdit size={18} /></button>
+
                 <button
-                  onClick={async () => await onUpdate(reminder.id, { status: "snoozed", snoozedUntil: new Date(Date.now() + 5 * 60 * 1000).toISOString() })}
-                  className="w-9 h-9 flex items-center justify-center bg-amber-100 text-amber-600 rounded-full hover:bg-amber-200 transition-colors shadow-sm"
-                  title="Snooze 5m"
-                ><MdSnooze size={18} /></button>
-                <button
-                  onClick={async () => await onUpdate(reminder.id, { status: "completed", completedAt: new Date().toISOString() })}
+                  onClick={async () => {
+                    await chrome.runtime.sendMessage({
+                      type: "DISMISS_NOTIFICATION",
+                      payload: { reminderId: reminder.id }
+                    })
+                  }}
                   className="w-9 h-9 flex items-center justify-center bg-green-100 text-green-600 rounded-full hover:bg-green-200 transition-colors shadow-sm"
                   title="Complete"
                 ><svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 24 24" height="18" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg></button>
@@ -145,8 +102,10 @@ export function ReminderCard({ reminder, tags, onUpdate, onDelete }: ReminderCar
               )}
             </div>
             
-            {/* Fake dynamic time indicator for visual parity */}
-            <span className="px-2.5 py-[3px] rounded-full text-[11px] font-bold bg-amber-50 text-amber-600 whitespace-nowrap">
+            {/* Status indicator */}
+            <span className={`px-2.5 py-[3px] rounded-full text-[11px] font-bold whitespace-nowrap ${
+              reminder.status === "snoozed" ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600" 
+            }`}>
               {reminder.status === "snoozed" ? "Snoozed" : "Active"}
             </span>
           </div>
@@ -158,9 +117,9 @@ export function ReminderCard({ reminder, tags, onUpdate, onDelete }: ReminderCar
 
           {/* Bottom Row: Time and Extra Indicators */}
           <div className="flex items-center gap-3 text-slate-500">
-            <p className="text-[12px] font-medium flex items-center gap-1.5">
+            <p className={`text-[12px] font-medium flex items-center gap-1.5 ${reminder.status === 'snoozed' ? 'text-amber-600' : ''}`}>
               <MdAccessTime size={15} /> 
-              {formatDateTime(reminder.scheduledAt)}
+              {formatDateTime((reminder.status === "snoozed" && reminder.snoozedUntil) ? reminder.snoozedUntil : reminder.scheduledAt)}
             </p>
             {recLabel && (
               <p className="text-[12px] font-medium flex items-center gap-1 text-slate-400">
@@ -169,7 +128,6 @@ export function ReminderCard({ reminder, tags, onUpdate, onDelete }: ReminderCar
             )}
           </div>
         </>
-      )}
     </div>
   )
 }

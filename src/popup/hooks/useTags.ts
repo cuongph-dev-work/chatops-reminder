@@ -43,7 +43,6 @@ export function useTags() {
       createdAt: new Date().toISOString()
     }
     await addTag(tag)
-    setTags(prev => [...prev, tag])
     return tag
   }, [tags])
 
@@ -52,12 +51,10 @@ export function useTags() {
     if (!tag) throw new Error(`Tag not found: ${id}`)
     const updated = { ...tag, name: name.trim(), color }
     await updateTag(updated)
-    setTags(prev => prev.map(t => t.id === id ? updated : t))
   }, [tags])
 
   const removeTag = useCallback(async (id: string) => {
     await deleteTagStorage(id)
-    setTags(prev => prev.filter(t => t.id !== id))
   }, [])
 
   return { tags, loading, createTag, editTag, removeTag }

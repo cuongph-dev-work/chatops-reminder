@@ -2,7 +2,7 @@
 // Storage adapter wrapping @plasmohq/storage with typed get/set for reminders, tags, and settings
 
 import { Storage } from "@plasmohq/storage"
-import type { Reminder, Settings, Tag } from "./types"
+import type { Reminder, Settings, SiteMapping, Tag } from "./types"
 import { DEFAULTS, STORAGE_KEYS } from "./constants"
 
 const storage = new Storage()
@@ -97,7 +97,11 @@ export async function deleteTag(id: string): Promise<void> {
 
 export async function getSettings(): Promise<Settings> {
   const val = await storage.get<Settings>(STORAGE_KEYS.SETTINGS)
-  return val ?? { language: DEFAULTS.LANGUAGE }
+  return {
+    language: val?.language ?? DEFAULTS.LANGUAGE,
+    autoSnooze: val?.autoSnooze ?? DEFAULTS.AUTO_SNOOZE,
+    autoSnoozeMinutes: val?.autoSnoozeMinutes ?? DEFAULTS.AUTO_SNOOZE_MINUTES
+  }
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
@@ -105,3 +109,36 @@ export async function saveSettings(settings: Settings): Promise<void> {
 }
 
 export { storage }
+
+// --- Site Mappings ---
+
+export async function getSiteMappings(): Promise<SiteMapping[]> {
+  const val = await storage.get<SiteMapping[]>(STORAGE_KEYS.SITE_MAPPINGS)
+  return val ?? []
+}
+
+export async function saveSiteMappings(mappings: SiteMapping[]): Promise<void> {
+  await storage.set(STORAGE_KEYS.SITE_MAPPINGS, mappings)
+}
+
+export async function upsertSiteMapping(domain: string, name: string, autoDetected: boolean): Promise<SiteMapping> {
+  const mappings = await getSiteMappings()
+  const idx = mappings.findIndex((m) => m.domain === domain)
+  if (idx >= 0) {
+    // Only update if still auto-detected (don't overwrite user customizations)
+    if (mappings[idx].autoDetected && autoDetected) {
+      mappings[idx].name = name
+    }
+    await saveSiteMappings(mappings)
+    return mappings[idx]
+  }
+  const newMapping: SiteMapping = { domain, name, autoDetected }
+  mappings.push(newMapping)
+  await saveSiteMappings(mappings)
+  return newMapping
+}
+
+export async function deleteSiteMapping(domain: string): Promise<void> {
+  const mappings = await getSiteMappings()
+  await saveSiteMappings(mappings.filter((m) => m.domain !== domain))
+}

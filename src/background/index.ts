@@ -5,7 +5,8 @@ import {
   getReminderById,
   getReminders,
   updateReminder,
-  addReminder
+  addReminder,
+  getSettings
 } from "~shared/storage"
 import { cancelAlarm, scheduleAlarm, setupMessageHandler } from "./messages"
 import { AUTO_PURGE_DAYS, NOTIFICATION_BUTTONS } from "~shared/constants"
@@ -15,36 +16,126 @@ import type { Reminder, RecurrenceRule, SnoozeNotificationPayload, DismissNotifi
 
 setupMessageHandler()
 
+// ─── "Remind Me" from Content Script ─────────────────────────────────────────
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "OPEN_POPUP_WITH_REMINDER") {
+    // Try to open the popup programmatically (Chrome 127+)
+    if (typeof chrome.action?.openPopup === "function") {
+      chrome.action.openPopup().catch(() => {
+        // Fallback: show badge to guide user to click
+        chrome.action.setBadgeText({ text: "1" })
+        chrome.action.setBadgeBackgroundColor({ color: "#3B82F6" })
+      })
+    } else {
+      // Fallback: show badge indicator
+      chrome.action.setBadgeText({ text: "1" })
+      chrome.action.setBadgeBackgroundColor({ color: "#3B82F6" })
+    }
+    sendResponse({ success: true })
+    return true
+  }
+  return false
+})
+
+// ─── Right-Click Context Menu ────────────────────────────────────────────────
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: "chatops-remind-me",
+    title: "Remind Me about this page",
+    contexts: ["page", "link"]
+  })
+})
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== "chatops-remind-me") return
+
+  const pageTitle = tab?.title || ""
+  const fallbackLink = info.linkUrl || info.pageUrl || tab?.url || ""
+
+  // Check if content script stored a Mattermost post permalink
+  chrome.storage.local.get(["contextMenuPermalink", "contextMenuPageTitle"], (result) => {
+    const link = result.contextMenuPermalink || fallbackLink
+    const title = result.contextMenuPageTitle || pageTitle
+
+    // Clear the stored context data
+    chrome.storage.local.remove(["contextMenuPermalink", "contextMenuPageTitle"])
+
+    // Store pending data so popup can pick it up
+    chrome.storage.local.set({
+      pendingReminder: { link, pageTitle: title }
+    }, () => {
+      // Try to open popup, fallback to badge
+      if (typeof chrome.action?.openPopup === "function") {
+        chrome.action.openPopup().catch(() => {
+          chrome.action.setBadgeText({ text: "1" })
+          chrome.action.setBadgeBackgroundColor({ color: "#3B82F6" })
+        })
+      } else {
+        chrome.action.setBadgeText({ text: "1" })
+        chrome.action.setBadgeBackgroundColor({ color: "#3B82F6" })
+      }
+    })
+  })
+})
+
 // ─── Alarm Handler ───────────────────────────────────────────────────────────
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (!alarm.name.startsWith("reminder:")) return
 
-  const reminderId = alarm.name.replace("reminder:", "")
-  const reminder = await getReminderById(reminderId)
-  if (!reminder || reminder.status === "completed") return
+  // Batch-fire: collect ALL pending reminders that are due right now.
+  // Chrome may coalesce alarms with the same `when` timestamp, so we scan
+  // the full list instead of relying on a single alarm name.
+  const allReminders = await getReminders()
+  const now = Date.now()
+
+  const dueReminders = allReminders.filter((r) => {
+    if (r.status === "completed") return false
+    // If snoozed, only fire when snoozedUntil has passed
+    if (r.status === "snoozed" && r.snoozedUntil) {
+      return new Date(r.snoozedUntil).getTime() <= now
+    }
+    const fireAt =
+      new Date(r.scheduledAt).getTime() - r.preReminderMinutes * 60 * 1000
+    return fireAt <= now
+  })
+
+  // Fallback: if no batch matches found, try the specific alarm's reminder
+  if (dueReminders.length === 0) {
+    const reminderId = alarm.name.replace("reminder:", "")
+    const reminder = await getReminderById(reminderId)
+    if (reminder && reminder.status !== "completed") {
+      dueReminders.push(reminder)
+    }
+  }
+
+  if (dueReminders.length === 0) return
 
   // Try to send to active tab for custom CSUI notification
   const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
   const activeTab = tabs[0]
 
-  if (activeTab?.id) {
-    try {
-      await chrome.tabs.sendMessage(activeTab.id, {
-        type: "SHOW_CUSTOM_NOTIFICATION",
-        payload: reminder
-      })
-    } catch (e) {
-      // Content script not ready or cannot receive message (e.g. chrome:// URL)
+  for (const reminder of dueReminders) {
+    if (activeTab?.id) {
+      try {
+        await chrome.tabs.sendMessage(activeTab.id, {
+          type: "SHOW_CUSTOM_NOTIFICATION",
+          payload: reminder
+        })
+      } catch (e) {
+        // Content script not ready or cannot receive message (e.g. chrome:// URL)
+        showNativeNotification(reminder)
+      }
+    } else {
       showNativeNotification(reminder)
     }
-  } else {
-    showNativeNotification(reminder)
-  }
 
-  // Mark as pending (re-confirm in case snoozed)
-  if (reminder.status !== "pending") {
-    await updateReminder({ ...reminder, status: "pending", snoozedUntil: null })
+    // Mark as pending (re-confirm in case snoozed)
+    if (reminder.status !== "pending") {
+      await updateReminder({ ...reminder, status: "pending", snoozedUntil: null })
+    }
   }
 })
 
@@ -90,9 +181,9 @@ chrome.notifications.onButtonClicked.addListener(
 )
 
 chrome.notifications.onClosed.addListener(async (notifId, byUser) => {
-  if (!notifId.startsWith("notif:") || !byUser) return
+  if (!notifId.startsWith("notif:")) return
   const reminderId = notifId.replace("notif:", "")
-  await handleCSUIDismiss({ reminderId })
+  await autoSnoozeReminder(reminderId)
 })
 
 // ─── Custom CSUI Notification Interactions ──────────────────────────────────
@@ -104,6 +195,10 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
   }
   if (message.type === "DISMISS_NOTIFICATION") {
     handleCSUIDismiss(message.payload).then(sendResponse)
+    return true
+  }
+  if (message.type === "IGNORE_NOTIFICATION") {
+    autoSnoozeReminder(message.payload.reminderId).then(sendResponse)
     return true
   }
   return false
@@ -131,6 +226,34 @@ async function handleCSUIDismiss(payload: DismissNotificationPayload) {
   } else {
     await markCompleted(reminder)
   }
+  return { success: true }
+}
+
+async function autoSnoozeReminder(reminderId: string): Promise<{ success: boolean }> {
+  const reminder = await getReminderById(reminderId)
+  if (!reminder || reminder.status === "completed") return { success: false }
+
+  const settings = await getSettings()
+  if (!settings.autoSnooze || reminder.hasAutoSnoozed) {
+    // Leave as pending if feature is off or already snoozed once
+    return { success: true }
+  }
+
+  const minutes = settings.autoSnoozeMinutes ?? 5
+  const snoozedUntil = new Date(Date.now() + minutes * 60 * 1000).toISOString()
+  
+  await updateReminder({ 
+    ...reminder, 
+    status: "snoozed", 
+    snoozedUntil,
+    hasAutoSnoozed: true // track to prevent infinite loops
+  })
+
+  // Create alarm for the new snoozed time
+  chrome.alarms.create(`reminder:${reminder.id}`, {
+    when: Date.now() + minutes * 60 * 1000
+  })
+
   return { success: true }
 }
 

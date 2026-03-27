@@ -3,6 +3,14 @@
 Auto-generated from all feature plans. Last updated: 2026-03-27
 
 ## Active Technologies
+- TypeScript / React 18 + Plasmo HQ, react-select, TailwindCSS, chrome.alarms, chrome.storage API (005-auto-snooze-setting)
+- @plasmohq/storage (005-auto-snooze-setting)
+- TypeScript 5.x / React 18 + React, TailwindCSS, Plasmo (006-optional-description)
+- `@plasmohq/storage` (006-optional-description)
+- TypeScript 5+ + React (Plasmo CSUI), TailwindCSS (007-notification-ok-auto-snooze)
+- TypeScript 5+ + React (Plasmo CSUI), TailwindCSS, react-select, react-icons (008-auto-detect-source-site)
+- `@plasmohq/storage` (Chrome local storage) (008-auto-detect-source-site)
+- TypeScript 5+ + React (Plasmo), TailwindCSS, react-icons (009-history-tab)
 
 - TypeScript 5.x, React 18 + Plasmo HQ, TailwindCSS, `react-icons` (003-popup-ui-redesign)
 
@@ -22,9 +30,10 @@ npm test && npm run lint
 TypeScript 5.x, React 18: Follow standard conventions
 
 ## Recent Changes
-- 004-fix-new-reminder-btn: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
+- 009-history-tab: Added TypeScript 5+ + React (Plasmo), TailwindCSS, react-icons
+- 008-auto-detect-source-site: Added TypeScript 5+ + React (Plasmo CSUI), TailwindCSS, react-select, react-icons
+- 007-notification-ok-auto-snooze: Added TypeScript 5+ + React (Plasmo CSUI), TailwindCSS
 
-- 003-popup-ui-redesign: Added TypeScript 5.x, React 18 + Plasmo HQ, TailwindCSS, `react-icons`
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

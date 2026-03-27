@@ -18,6 +18,12 @@ export interface Tag {
   createdAt: string // ISO 8601
 }
 
+export interface SiteMapping {
+  domain: string      // hostname, e.g. "jira.company.com"
+  name: string        // friendly display name, e.g. "Jira"
+  autoDetected: boolean // true if name was derived from page title
+}
+
 export interface Reminder {
   id: string
   title: string
@@ -30,7 +36,11 @@ export interface Reminder {
   createdAt: string // ISO 8601
   completedAt: string | null
   snoozedUntil: string | null
+  hasAutoSnoozed?: boolean // Flag to prevent infinite auto-snooze loops
   sourceInstanceUrl?: string // Mattermost instance base URL (optional for manual creation)
+  description?: string // Optional note/description for the reminder
+  sourceSiteName?: string // Friendly name of the site where reminder was created
+  sourcePageTitle?: string // Raw document.title of the source page
 }
 
 export interface NotificationEvent {
@@ -43,6 +53,8 @@ export interface NotificationEvent {
 
 export interface Settings {
   language: "en" | "vi"
+  autoSnooze?: boolean
+  autoSnoozeMinutes?: number
 }
 
 // Message passing contracts between content scripts and background
@@ -51,6 +63,7 @@ export type MessageType =
   | "UPDATE_REMINDER"
   | "DELETE_REMINDER"
   | "CLEAR_COMPLETED"
+  | "IGNORE_NOTIFICATION"
 
 export interface CreateReminderPayload {
   title: string
@@ -59,15 +72,19 @@ export interface CreateReminderPayload {
   preReminderMinutes: 0 | 5 | 10 | 15 | 30
   tagIds: string[]
   recurrence: RecurrenceRule | null
+  description?: string
+  sourcePageTitle?: string // Raw document.title to auto-create SiteMapping
 }
 
 export interface UpdateReminderPayload {
   id: string
   title?: string
+  messageLink?: string
   scheduledAt?: string
   preReminderMinutes?: 0 | 5 | 10 | 15 | 30
   tagIds?: string[]
   recurrence?: RecurrenceRule | null
+  description?: string
 }
 
 export interface DeleteReminderPayload {
@@ -87,6 +104,15 @@ export interface DismissNotificationPayload {
   reminderId: string
 }
 
+export interface IgnoreNotificationPayload {
+  reminderId: string
+}
+
+export interface PendingReminderData {
+  link: string
+  pageTitle: string
+}
+
 export type BackgroundMessage =
   | { type: "CREATE_REMINDER"; payload: CreateReminderPayload }
   | { type: "UPDATE_REMINDER"; payload: UpdateReminderPayload }
@@ -94,6 +120,8 @@ export type BackgroundMessage =
   | { type: "CLEAR_COMPLETED"; payload: ClearCompletedPayload }
   | { type: "SNOOZE_NOTIFICATION"; payload: SnoozeNotificationPayload }
   | { type: "DISMISS_NOTIFICATION"; payload: DismissNotificationPayload }
+  | { type: "IGNORE_NOTIFICATION"; payload: IgnoreNotificationPayload }
+  | { type: "OPEN_POPUP_WITH_REMINDER"; payload: PendingReminderData }
 
 export type BackgroundResponse =
   | { success: true; reminder: Reminder }
