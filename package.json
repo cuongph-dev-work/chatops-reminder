@@ -1,0 +1,53 @@
+{
+  "name": "chatops-reminder",
+  "displayName": "ChatOps Reminder",
+  "version": "0.1.0",
+  "description": "Schedule reminders from Mattermost chat messages",
+  "author": "Cuong",
+  "scripts": {
+    "dev": "plasmo dev",
+    "build": "plasmo build && rm -rf build/chatops-reminder && mv build/chrome-mv3-prod build/chatops-reminder",
+    "package": "plasmo build --zip && mv build/chrome-mv3-prod.zip build/chatops-reminder.zip",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@plasmohq/storage": "^1.11.0",
+    "plasmo": "0.90.5",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "4.1.1",
+    "@testing-library/jest-dom": "^6.4.1",
+    "@testing-library/react": "^14.2.0",
+    "@types/chrome": "0.0.258",
+    "@types/node": "20.11.5",
+    "@types/react": "18.2.48",
+    "@types/react-dom": "18.2.18",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.17",
+    "jsdom": "^24.0.0",
+    "postcss": "^8.4.33",
+    "prettier": "3.2.4",
+    "tailwindcss": "^3.4.1",
+    "typescript": "5.3.3",
+    "vitest": "^1.2.2"
+  },
+  "manifest": {
+    "host_permissions": [
+      "https://*/*",
+      "http://*/*"
+    ],
+    "permissions": [
+      "tabs",
+      "storage",
+      "alarms",
+      "notifications"
+    ],
+    "background": {
+      "service_worker": "background.ts"
+    }
+  },
+  "packageManager": "pnpm@10.32.1+sha512.a706938f0e89ac1456b6563eab4edf1d1faf3368d1191fc5c59790e96dc918e4456ab2e67d613de1043d2e8c81f87303e6b40d4ffeca9df15ef1ad567348f2be"
+}

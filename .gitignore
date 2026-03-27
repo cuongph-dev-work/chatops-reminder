@@ -1,0 +1,33 @@
+# Node.js / Plasmo / Chrome Extension
+node_modules/
+.pnpm-store/
+dist/
+build/
+.plasmo/
+*.crx
+*.zip
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Testing
+coverage/
+.vitest/
+
+# Temp scaffolding
+tmp-chatops-plasmo-scaffold/
