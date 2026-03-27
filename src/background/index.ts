@@ -9,7 +9,7 @@ import {
 } from "~shared/storage"
 import { cancelAlarm, scheduleAlarm, setupMessageHandler } from "./messages"
 import { AUTO_PURGE_DAYS, NOTIFICATION_BUTTONS } from "~shared/constants"
-import type { Reminder, RecurrenceRule } from "~shared/types"
+import type { Reminder, RecurrenceRule, SnoozeNotificationPayload, DismissNotificationPayload } from "~shared/types"
 
 // ─── Message Handlers ────────────────────────────────────────────────────────
 
@@ -24,18 +24,23 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   const reminder = await getReminderById(reminderId)
   if (!reminder || reminder.status === "completed") return
 
-  // Display notification
-  chrome.notifications.create(`notif:${reminder.id}`, {
-    type: "basic",
-    iconUrl: chrome.runtime.getURL("assets/icon.png"),
-    title: reminder.title,
-    message: `Reminder from: ${reminder.sourceInstanceUrl}`,
-    buttons: [
-      { title: NOTIFICATION_BUTTONS.SNOOZE_5.title },
-      { title: NOTIFICATION_BUTTONS.SNOOZE_10.title }
-    ],
-    requireInteraction: true
-  })
+  // Try to send to active tab for custom CSUI notification
+  const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
+  const activeTab = tabs[0]
+
+  if (activeTab?.id) {
+    try {
+      await chrome.tabs.sendMessage(activeTab.id, {
+        type: "SHOW_CUSTOM_NOTIFICATION",
+        payload: reminder
+      })
+    } catch (e) {
+      // Content script not ready or cannot receive message (e.g. chrome:// URL)
+      showNativeNotification(reminder)
+    }
+  } else {
+    showNativeNotification(reminder)
+  }
 
   // Mark as pending (re-confirm in case snoozed)
   if (reminder.status !== "pending") {
@@ -43,7 +48,21 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 })
 
-// ─── Notification Interactions ───────────────────────────────────────────────
+function showNativeNotification(reminder: Reminder, missed: boolean = false) {
+  chrome.notifications.create(`notif:${reminder.id}`, {
+    type: "basic",
+    iconUrl: chrome.runtime.getURL("assets/icon.png"),
+    title: reminder.title,
+    message: `${missed ? "Missed reminder" : "Reminder"} from: ${reminder.sourceInstanceUrl}`,
+    buttons: [
+      { title: NOTIFICATION_BUTTONS.SNOOZE_5.title },
+      { title: NOTIFICATION_BUTTONS.SNOOZE_10.title }
+    ],
+    requireInteraction: true
+  })
+}
+
+// ─── Native Notification Interactions (Fallback) ──────────────────────────────
 
 chrome.notifications.onClicked.addListener(async (notifId) => {
   if (!notifId.startsWith("notif:")) return
@@ -51,10 +70,8 @@ chrome.notifications.onClicked.addListener(async (notifId) => {
   const reminder = await getReminderById(reminderId)
   if (!reminder) return
 
-  // Open message link in new tab
   chrome.tabs.create({ url: reminder.messageLink })
 
-  // Mark completed (only mark if it was pending, not if it's recurring)
   if (!reminder.recurrence) {
     await markCompleted(reminder)
   } else {
@@ -67,24 +84,7 @@ chrome.notifications.onButtonClicked.addListener(
   async (notifId, buttonIndex) => {
     if (!notifId.startsWith("notif:")) return
     const reminderId = notifId.replace("notif:", "")
-    const reminder = await getReminderById(reminderId)
-    if (!reminder) return
-
-    const snoozeMinutes = buttonIndex === 0 ? 5 : 10
-    const snoozedUntil = new Date(Date.now() + snoozeMinutes * 60 * 1000).toISOString()
-
-    const snoozed: Reminder = {
-      ...reminder,
-      status: "snoozed",
-      snoozedUntil
-    }
-    await updateReminder(snoozed)
-
-    // Schedule snooze alarm
-    chrome.alarms.create(`reminder:${reminder.id}`, {
-      when: Date.now() + snoozeMinutes * 60 * 1000
-    })
-
+    await handleCSUISnooze({ reminderId, minutes: buttonIndex === 0 ? 5 : 10 })
     chrome.notifications.clear(notifId)
   }
 )
@@ -92,15 +92,47 @@ chrome.notifications.onButtonClicked.addListener(
 chrome.notifications.onClosed.addListener(async (notifId, byUser) => {
   if (!notifId.startsWith("notif:") || !byUser) return
   const reminderId = notifId.replace("notif:", "")
-  const reminder = await getReminderById(reminderId)
-  if (!reminder) return
+  await handleCSUIDismiss({ reminderId })
+})
+
+// ─── Custom CSUI Notification Interactions ──────────────────────────────────
+
+chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
+  if (message.type === "SNOOZE_NOTIFICATION") {
+    handleCSUISnooze(message.payload).then(sendResponse)
+    return true
+  }
+  if (message.type === "DISMISS_NOTIFICATION") {
+    handleCSUIDismiss(message.payload).then(sendResponse)
+    return true
+  }
+  return false
+})
+
+async function handleCSUISnooze(payload: SnoozeNotificationPayload) {
+  const reminder = await getReminderById(payload.reminderId)
+  if (!reminder) return { success: false }
+
+  const snoozedUntil = new Date(Date.now() + payload.minutes * 60 * 1000).toISOString()
+  await updateReminder({ ...reminder, status: "snoozed", snoozedUntil })
+
+  chrome.alarms.create(`reminder:${reminder.id}`, {
+    when: Date.now() + payload.minutes * 60 * 1000
+  })
+  return { success: true }
+}
+
+async function handleCSUIDismiss(payload: DismissNotificationPayload) {
+  const reminder = await getReminderById(payload.reminderId)
+  if (!reminder) return { success: false }
 
   if (reminder.recurrence) {
     await scheduleNextRecurrence(reminder)
   } else {
     await markCompleted(reminder)
   }
-})
+  return { success: true }
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -216,17 +248,21 @@ async function recheckPendingReminders(): Promise<void> {
 
     if (fireAt <= now) {
       // Reminder was missed while browser was closed — fire now
-      chrome.notifications.create(`notif:${reminder.id}`, {
-        type: "basic",
-        iconUrl: chrome.runtime.getURL("assets/icon.png"),
-        title: reminder.title,
-        message: `Missed reminder from: ${reminder.sourceInstanceUrl}`,
-        buttons: [
-          { title: NOTIFICATION_BUTTONS.SNOOZE_5.title },
-          { title: NOTIFICATION_BUTTONS.SNOOZE_10.title }
-        ],
-        requireInteraction: true
-      })
+      // Try to send to active tab for custom CSUI notification
+      const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
+      const activeTab = tabs[0]
+      if (activeTab?.id) {
+        try {
+          await chrome.tabs.sendMessage(activeTab.id, {
+            type: "SHOW_CUSTOM_NOTIFICATION",
+            payload: reminder
+          })
+        } catch (e) {
+          showNativeNotification(reminder, true)
+        }
+      } else {
+        showNativeNotification(reminder, true)
+      }
     } else {
       // Still in the future — reschedule
       await scheduleAlarm(reminder)

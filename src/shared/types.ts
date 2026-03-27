@@ -21,7 +21,7 @@ export interface Tag {
 export interface Reminder {
   id: string
   title: string
-  messageLink: string // Mattermost message permalink
+  messageLink?: string // Mattermost message permalink (optional for manual creation)
   scheduledAt: string // ISO 8601
   preReminderMinutes: 0 | 5 | 10 | 15 | 30
   tagIds: string[]
@@ -30,7 +30,7 @@ export interface Reminder {
   createdAt: string // ISO 8601
   completedAt: string | null
   snoozedUntil: string | null
-  sourceInstanceUrl: string // Mattermost instance base URL
+  sourceInstanceUrl?: string // Mattermost instance base URL (optional for manual creation)
 }
 
 export interface NotificationEvent {
@@ -54,7 +54,7 @@ export type MessageType =
 
 export interface CreateReminderPayload {
   title: string
-  messageLink: string
+  messageLink?: string
   scheduledAt: string
   preReminderMinutes: 0 | 5 | 10 | 15 | 30
   tagIds: string[]
@@ -78,11 +78,22 @@ export interface ClearCompletedPayload {
   id?: string // omit to clear all
 }
 
+export interface SnoozeNotificationPayload {
+  reminderId: string
+  minutes: number
+}
+
+export interface DismissNotificationPayload {
+  reminderId: string
+}
+
 export type BackgroundMessage =
   | { type: "CREATE_REMINDER"; payload: CreateReminderPayload }
   | { type: "UPDATE_REMINDER"; payload: UpdateReminderPayload }
   | { type: "DELETE_REMINDER"; payload: DeleteReminderPayload }
   | { type: "CLEAR_COMPLETED"; payload: ClearCompletedPayload }
+  | { type: "SNOOZE_NOTIFICATION"; payload: SnoozeNotificationPayload }
+  | { type: "DISMISS_NOTIFICATION"; payload: DismissNotificationPayload }
 
 export type BackgroundResponse =
   | { success: true; reminder: Reminder }

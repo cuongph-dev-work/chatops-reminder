@@ -23,19 +23,16 @@ export function useTags() {
     })
 
     // Subscribe to storage changes
-    const unwatch = storage.watch<Tag[]>(STORAGE_KEYS.TAGS, (change) => {
-      if (change.newValue !== undefined) {
-        setTags(change.newValue)
+    storage.watch({
+      [STORAGE_KEYS.TAGS]: (change: { newValue?: Tag[] }) => {
+        if (change.newValue !== undefined) {
+          setTags(change.newValue)
+        }
       }
     })
-
-    return () => {
-      unwatch()
-    }
   }, [])
 
   const createTag = useCallback(async (name: string, color: string): Promise<Tag> => {
-    // Check for duplicate name (case-insensitive)
     const existing = tags.find((t) => t.name.toLowerCase() === name.toLowerCase())
     if (existing) throw new Error(`Tag "${name}" already exists`)
 
@@ -46,17 +43,21 @@ export function useTags() {
       createdAt: new Date().toISOString()
     }
     await addTag(tag)
+    setTags(prev => [...prev, tag])
     return tag
   }, [tags])
 
   const editTag = useCallback(async (id: string, name: string, color: string) => {
     const tag = tags.find((t) => t.id === id)
     if (!tag) throw new Error(`Tag not found: ${id}`)
-    await updateTag({ ...tag, name: name.trim(), color })
+    const updated = { ...tag, name: name.trim(), color }
+    await updateTag(updated)
+    setTags(prev => prev.map(t => t.id === id ? updated : t))
   }, [tags])
 
   const removeTag = useCallback(async (id: string) => {
     await deleteTagStorage(id)
+    setTags(prev => prev.filter(t => t.id !== id))
   }, [])
 
   return { tags, loading, createTag, editTag, removeTag }

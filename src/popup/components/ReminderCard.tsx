@@ -2,6 +2,7 @@
 // Individual reminder display with inline edit mode, tags, recurrence indicator
 
 import React, { useState } from "react"
+import { MdEdit, MdDelete, MdAccessTime, MdRepeat, MdSnooze } from "react-icons/md"
 import type { Reminder, Tag } from "~shared/types"
 import { TagBadge } from "./TagBadge"
 import { useI18n } from "~shared/i18n/index"
@@ -10,7 +11,7 @@ import { PRE_REMINDER_OPTIONS, DAYS_OF_WEEK } from "~shared/constants"
 interface ReminderCardProps {
   reminder: Reminder
   tags: Tag[]
-  onUpdate: (id: string, updates: Partial<Pick<Reminder, "title" | "scheduledAt" | "preReminderMinutes" | "tagIds" | "recurrence">>) => Promise<unknown>
+  onUpdate: (id: string, updates: Partial<Reminder>) => Promise<unknown>
   onDelete: (id: string) => Promise<unknown>
 }
 
@@ -57,14 +58,14 @@ export function ReminderCard({ reminder, tags, onUpdate, onDelete }: ReminderCar
     setEditing(false)
   }
 
-  const statusColor = {
-    pending: "border-l-blue-500",
-    snoozed: "border-l-amber-500",
-    completed: "border-l-green-500"
-  }[reminder.status]
+  // const statusColor = {
+  //   pending: "border-l-blue-500",
+  //   snoozed: "border-l-amber-500",
+  //   completed: "border-l-green-500"
+  // }[reminder.status]
 
   return (
-    <div className={`bg-white rounded-lg border-l-4 ${statusColor} shadow-sm p-3 space-y-1`}>
+    <div className="bg-white rounded-[14px] shadow-sm p-4 pt-3.5 space-y-2 relative group flex flex-col hover:shadow-md transition-shadow border border-gray-100">
       {editing ? (
         <div className="space-y-2">
           <input
@@ -82,70 +83,91 @@ export function ReminderCard({ reminder, tags, onUpdate, onDelete }: ReminderCar
             <button
               onClick={handleSave}
               disabled={saving}
-              className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+              className="text-[12px] bg-blue-600 font-semibold text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
             >
-              {saving ? "…" : t("btn_save")}
+              {saving ? "…" : "Save"}
             </button>
             <button
               onClick={() => setEditing(false)}
-              className="text-xs text-gray-500 px-3 py-1 rounded border border-gray-300 hover:bg-gray-50"
+              className="text-[12px] font-medium text-slate-500 px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-50"
             >
-              {t("btn_cancel")}
+              Cancel
             </button>
           </div>
         </div>
       ) : (
         <>
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-medium text-gray-800 leading-tight">{reminder.title}</p>
+          {/* Hover Action Row (Absolute positioned) */}
+          <div className="absolute inset-x-0 inset-y-0 bg-white/90 backdrop-blur-[1px] rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 z-10 pointer-events-none group-hover:pointer-events-auto">
             {reminder.status !== "completed" && (
-              <div className="flex gap-1 flex-shrink-0">
+              <>
                 <button
                   onClick={() => setEditing(true)}
-                  className="text-xs text-gray-400 hover:text-blue-600 transition-colors"
-                  title={t("btn_edit")}
-                >✏️</button>
+                  className="w-9 h-9 flex items-center justify-center bg-blue-100 text-blue-600 rounded-full hover:bg-blue-200 transition-colors shadow-sm"
+                  title="Edit"
+                ><MdEdit size={18} /></button>
                 <button
-                  onClick={() => onDelete(reminder.id)}
-                  className="text-xs text-gray-400 hover:text-red-500 transition-colors"
-                  title={t("btn_delete")}
-                >🗑️</button>
-              </div>
+                  onClick={async () => await onUpdate(reminder.id, { status: "snoozed", snoozedUntil: new Date(Date.now() + 5 * 60 * 1000).toISOString() })}
+                  className="w-9 h-9 flex items-center justify-center bg-amber-100 text-amber-600 rounded-full hover:bg-amber-200 transition-colors shadow-sm"
+                  title="Snooze 5m"
+                ><MdSnooze size={18} /></button>
+                <button
+                  onClick={async () => await onUpdate(reminder.id, { status: "completed", completedAt: new Date().toISOString() })}
+                  className="w-9 h-9 flex items-center justify-center bg-green-100 text-green-600 rounded-full hover:bg-green-200 transition-colors shadow-sm"
+                  title="Complete"
+                ><svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 24 24" height="18" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg></button>
+              </>
             )}
+            <button
+              onClick={() => onDelete(reminder.id)}
+              className="w-9 h-9 flex items-center justify-center bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition-colors shadow-sm"
+              title="Delete"
+            ><MdDelete size={18} /></button>
           </div>
 
-          <p className="text-xs text-gray-500">
-            🕐 {formatDateTime(reminder.scheduledAt)}
-            {reminder.preReminderMinutes > 0 &&
-              ` (${PRE_REMINDER_OPTIONS.find(o => o.value === reminder.preReminderMinutes)?.label})`}
+          {/* Top Row: Tags & Time Indicator */}
+          <div className="flex items-center justify-between">
+            <div className="flex gap-1 flex-wrap">
+              {reminderTags.length > 0 ? (
+                reminderTags.map((tag) => (
+                  <span
+                    key={tag.id}
+                    className="px-2 py-[3px] rounded-full text-[10px] font-bold tracking-wide uppercase"
+                    style={{ backgroundColor: `${tag.color}20`, color: tag.color }}
+                  >
+                    {tag.name}
+                  </span>
+                ))
+              ) : (
+                <span className="px-2 py-[3px] rounded-full text-[10px] font-bold tracking-wide uppercase bg-slate-100 text-slate-500">
+                  UNTAGGED
+                </span>
+              )}
+            </div>
+            
+            {/* Fake dynamic time indicator for visual parity */}
+            <span className="px-2.5 py-[3px] rounded-full text-[11px] font-bold bg-amber-50 text-amber-600 whitespace-nowrap">
+              {reminder.status === "snoozed" ? "Snoozed" : "Active"}
+            </span>
+          </div>
+
+          {/* Title */}
+          <p className="text-[15px] font-semibold text-slate-800 leading-snug py-1">
+            {reminder.title}
           </p>
 
-          {recLabel && (
-            <p className="text-xs text-purple-600">🔁 {recLabel}</p>
-          )}
-
-          {reminder.status === "snoozed" && reminder.snoozedUntil && (
-            <p className="text-xs text-amber-600">💤 {t("snoozing_until")} {formatDateTime(reminder.snoozedUntil)}</p>
-          )}
-
-          {reminderTags.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-1">
-              {reminderTags.map((tag) => (
-                <TagBadge key={tag.id} tag={tag} />
-              ))}
-            </div>
-          )}
-
-          {reminder.messageLink && (
-            <a
-              href={reminder.messageLink}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-blue-500 hover:underline"
-            >
-              {t("open_message")} →
-            </a>
-          )}
+          {/* Bottom Row: Time and Extra Indicators */}
+          <div className="flex items-center gap-3 text-slate-500">
+            <p className="text-[12px] font-medium flex items-center gap-1.5">
+              <MdAccessTime size={15} /> 
+              {formatDateTime(reminder.scheduledAt)}
+            </p>
+            {recLabel && (
+              <p className="text-[12px] font-medium flex items-center gap-1 text-slate-400">
+                <MdRepeat size={14} /> {recLabel}
+              </p>
+            )}
+          </div>
         </>
       )}
     </div>

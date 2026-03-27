@@ -5,6 +5,7 @@ import styleText from "data-text:../styles/global.css"
 import type { PlasmoCSConfig, PlasmoCSUIJSXContainer, PlasmoRender, PlasmoGetShadowHostId } from "plasmo"
 import React, { useEffect, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
+import { MdClose } from "react-icons/md"
 
 import { I18nProvider, useI18n } from "~shared/i18n/index"
 
@@ -116,10 +117,10 @@ function ModalForm({ messageLink, onClose }: ModalFormProps) {
           <h2 className="text-lg font-semibold text-gray-800">{t("modal_title")}</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+            className="p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors flex items-center justify-center"
             aria-label="Close"
           >
-            ×
+            <MdClose size={20} />
           </button>
         </div>
 

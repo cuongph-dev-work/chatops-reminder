@@ -18,22 +18,17 @@ export function useReminders() {
     })
 
     // Reactively watch storage changes
-    const unwatch = storage.watch<Reminder[]>(STORAGE_KEYS.REMINDERS, (change) => {
-      if (change.newValue !== undefined) {
-        setReminders(change.newValue)
+    storage.watch({
+      [STORAGE_KEYS.REMINDERS]: (change: { newValue?: Reminder[] }) => {
+        if (change.newValue !== undefined) {
+          setReminders(change.newValue)
+        }
       }
     })
-
-    return () => {
-      unwatch()
-    }
   }, [])
 
   const updateReminder = useCallback(
-    async (
-      id: string,
-      updates: Partial<Pick<Reminder, "title" | "scheduledAt" | "preReminderMinutes" | "tagIds" | "recurrence">>
-    ) => {
+    async (id: string, updates: Partial<Reminder>) => {
       const response = await chrome.runtime.sendMessage({
         type: "UPDATE_REMINDER",
         payload: { id, ...updates }

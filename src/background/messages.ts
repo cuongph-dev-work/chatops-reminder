@@ -65,7 +65,7 @@ async function handleCreate(
     createdAt: now,
     completedAt: null,
     snoozedUntil: null,
-    sourceInstanceUrl: new URL(payload.messageLink).origin
+    sourceInstanceUrl: payload.messageLink ? new URL(payload.messageLink).origin : undefined
   }
 
   try {
@@ -154,6 +154,10 @@ export function setupMessageHandler(): void {
         case "CLEAR_COMPLETED":
           handlerPromise = handleClearCompleted(message.payload.id)
           break
+        case "SNOOZE_NOTIFICATION":
+        case "DISMISS_NOTIFICATION":
+          // Handled in src/background/index.ts
+          return false
         default: {
           const _exhaustive: never = message
           sendResponse({ success: false, error: "Unknown message type" })

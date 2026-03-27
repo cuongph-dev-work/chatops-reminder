@@ -11,7 +11,7 @@ type SortMode = "time" | "tag"
 interface ReminderListProps {
   reminders: Reminder[]
   tags: Tag[]
-  onUpdate: (id: string, updates: Partial<Pick<Reminder, "title" | "scheduledAt" | "preReminderMinutes" | "tagIds" | "recurrence">>) => Promise<unknown>
+  onUpdate: (id: string, updates: Partial<Reminder>) => Promise<unknown>
   onDelete: (id: string) => Promise<unknown>
   emptyMessage?: string
 }

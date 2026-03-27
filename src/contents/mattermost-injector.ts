@@ -75,7 +75,13 @@ function injectRemindMeButton(menu: Element, triggerElement: Element): void {
     text-align: left;
     gap: 8px;
   `
-  btn.innerHTML = `⏰ Remind Me`
+  btn.innerHTML = `
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="1.2em" width="1.2em" xmlns="http://www.w3.org/2000/svg">
+      <path fill="none" d="M0 0h24v24H0z"></path>
+      <path d="M12 20a7 7 0 1 0 0-14 7 7 0 0 0 0 14zm0 2a9 9 0 1 1 0-18 9 9 0 0 1 0 18zm-.25-16h1.5v5l3.6 2.1-.75 1.2-4.35-2.55V6zM17 3.3l1.8-1.5 2.15 2.5-1.8 1.5L17 3.3zm-10-1.5L8.8 3.3 5.4 1.8 3.25 4.3 5.4 5.8 7 3.3z"></path>
+    </svg>
+    <span>Remind Me</span>
+  `
 
   btn.addEventListener("click", (e) => {
     e.preventDefault()

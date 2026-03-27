@@ -1,5 +1,5 @@
-// src/popup/components/TagBadge.tsx
 import React from "react"
+import { MdClose } from "react-icons/md"
 import type { Tag } from "~shared/types"
 
 interface TagBadgeProps {
@@ -28,10 +28,10 @@ export function TagBadge({ tag, onRemove, size = "sm" }: TagBadgeProps) {
       {onRemove && (
         <button
           onClick={onRemove}
-          className="ml-0.5 hover:opacity-70 transition-opacity"
+          className="ml-0.5 p-0.5 hover:opacity-70 transition-opacity"
           aria-label={`Remove tag ${tag.name}`}
         >
-          ×
+          <MdClose size={12} />
         </button>
       )}
     </span>
