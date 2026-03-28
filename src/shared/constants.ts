@@ -32,7 +32,8 @@ export const STORAGE_KEYS = {
   TAGS: "tags",
   SETTINGS: "settings",
   SITE_MAPPINGS: "siteMappings",
-  PENDING_REMINDER: "pendingReminder"
+  PENDING_REMINDER: "pendingReminder",
+  DRAFT_STATE: "chatops-reminder-new-draft"
 } as const
 
 export const MESSAGE_TYPES = {

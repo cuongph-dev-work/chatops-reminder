@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from "react"
 import { useI18n } from "~shared/i18n/index"
-import { MdClose, MdOutlineAccessTime, MdLabelOutline } from "react-icons/md"
-import type { CreateReminderPayload, RecurrenceRule, BackgroundResponse, Tag, Reminder } from "~shared/types"
-import { DAYS_OF_WEEK, PRE_REMINDER_OPTIONS, RECURRENCE_TYPES } from "~shared/constants"
+import { MdClose, MdOutlineAccessTime, MdLabelOutline, MdOpenInNew } from "react-icons/md"
+import type { CreateReminderPayload, RecurrenceRule, BackgroundResponse, Tag, Reminder, DraftState } from "~shared/types"
+import { DAYS_OF_WEEK, PRE_REMINDER_OPTIONS, RECURRENCE_TYPES, STORAGE_KEYS } from "~shared/constants"
 import Select from "react-select"
+import { useStorage } from "@plasmohq/storage/hook"
 
 interface ReminderFormProps {
   tags: Tag[]
@@ -34,17 +35,82 @@ export function ReminderForm({ tags, initialReminder, defaultLink, defaultSiteTi
   const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Auto-Draft Implementation
+  const isEditing = !!initialReminder
+  const [draft, setDraft, { isLoading }] = useStorage<DraftState | null>(STORAGE_KEYS.DRAFT_STATE, null)
+  const [hasLoadedDraft, setHasLoadedDraft] = useState(false)
+
+  // Load existing draft data (US1) & Check Expiration (US2)
+  useEffect(() => {
+    if (hasLoadedDraft || isLoading) return
+
+    if (draft) {
+      const now = Date.now()
+      // Expiration logic (>15m)
+      if (now - draft.lastUpdatedAt > 15 * 60 * 1000) {
+        setDraft(null)
+      } else {
+        // If editing, only hydrate if the draft belongs to THIS reminder
+        if (isEditing && draft.editingId !== initialReminder.id) {
+          setHasLoadedDraft(true)
+          return
+        }
+
+        // Load existing draft data
+        if (draft.title) setTitle(draft.title)
+        if (draft.description !== undefined) setDescription(draft.description)
+        if (draft.scheduledAt) setScheduledAt(draft.scheduledAt)
+        if (draft.messageLink !== undefined) setMessageLink(draft.messageLink)
+        if (draft.tagIds) setSelectedTagIds(draft.tagIds)
+        if (draft.preReminderMinutes !== undefined) setPreReminderMinutes(draft.preReminderMinutes)
+        if (draft.recurrence !== undefined) {
+          if (draft.recurrence) {
+            setRecurrenceType(draft.recurrence.type)
+            if (draft.recurrence.dayOfWeek !== null && draft.recurrence.dayOfWeek !== undefined) setDayOfWeek(draft.recurrence.dayOfWeek)
+            if (draft.recurrence.dayOfMonth !== null && draft.recurrence.dayOfMonth !== undefined) setDayOfMonth(draft.recurrence.dayOfMonth)
+          } else {
+            setRecurrenceType("none")
+          }
+        }
+      }
+    }
+    setHasLoadedDraft(true)
+  }, [draft, isLoading, isEditing, hasLoadedDraft, setDraft])
+
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
 
-  function buildRecurrence(): RecurrenceRule | null {
+  const buildRecurrence = React.useCallback((): RecurrenceRule | null => {
     if (recurrenceType === "none") return null
     return {
       type: recurrenceType,
       dayOfWeek: recurrenceType === "weekly" ? dayOfWeek : null,
       dayOfMonth: recurrenceType === "monthly" ? dayOfMonth : null
     }
+  }, [recurrenceType, dayOfWeek, dayOfMonth])
+
+  // Sync form fields to draft (US1) & now also for edits
+  useEffect(() => {
+    if (!hasLoadedDraft) return
+
+    const newDraft: DraftState = {
+      editingId: initialReminder?.id,
+      title,
+      description,
+      scheduledAt,
+      messageLink,
+      tagIds: selectedTagIds,
+      preReminderMinutes,
+      recurrence: buildRecurrence(),
+      lastUpdatedAt: Date.now()
+    }
+    setDraft(newDraft)
+  }, [title, description, scheduledAt, messageLink, selectedTagIds, preReminderMinutes, buildRecurrence, initialReminder?.id, hasLoadedDraft, setDraft])
+
+  function handleCancelClick() {
+    setDraft(null)
+    onCancel()
   }
 
   async function handleSave() {
@@ -83,6 +149,7 @@ export function ReminderForm({ tags, initialReminder, defaultLink, defaultSiteTi
           payload
         }) as BackgroundResponse
         if (response.success) {
+          setDraft(null) // T129: Clear draft on success (US3)
           onCancel()
         } else {
           setError("error" in response ? response.error : "Failed to save reminder")
@@ -104,7 +171,7 @@ export function ReminderForm({ tags, initialReminder, defaultLink, defaultSiteTi
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-gray-800">{initialReminder ? "Edit Reminder" : "New Reminder"}</h2>
         <button
-          onClick={onCancel}
+          onClick={handleCancelClick}
           className="text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 p-1 transition-colors"
           title="Cancel"
         >
@@ -158,13 +225,25 @@ export function ReminderForm({ tags, initialReminder, defaultLink, defaultSiteTi
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Link (Optional)
           </label>
-          <input
-            type="url"
-            value={messageLink}
-            onChange={(e) => setMessageLink(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="https://chat.example.com/..."
-          />
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={messageLink}
+              onChange={(e) => setMessageLink(e.target.value)}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="https://chat.example.com/..."
+            />
+            {messageLink && (
+              <button
+                type="button"
+                onClick={() => window.open(messageLink, "_blank")}
+                className="flex items-center justify-center px-3 border border-gray-300 rounded-lg text-gray-500 hover:text-blue-600 hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                title="Open Link"
+              >
+                <MdOpenInNew size={18} />
+              </button>
+            )}
+          </div>
         </div>
 
         <div>

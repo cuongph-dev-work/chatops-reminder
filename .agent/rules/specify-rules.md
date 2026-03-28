@@ -1,6 +1,6 @@
 # chatops-reminder Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-03-27
+Auto-generated from all feature plans. Last updated: 2026-03-28
 
 ## Active Technologies
 - TypeScript / React 18 + Plasmo HQ, react-select, TailwindCSS, chrome.alarms, chrome.storage API (005-auto-snooze-setting)
@@ -11,6 +11,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-27
 - TypeScript 5+ + React (Plasmo CSUI), TailwindCSS, react-select, react-icons (008-auto-detect-source-site)
 - `@plasmohq/storage` (Chrome local storage) (008-auto-detect-source-site)
 - TypeScript 5+ + React (Plasmo), TailwindCSS, react-icons (009-history-tab)
+- TypeScript 5+, React 18 + `@plasmohq/storage/hook`, `react` (012-form-auto-draft)
+- `chrome.storage.local` (via Plasmo Storage) (012-form-auto-draft)
 
 - TypeScript 5.x, React 18 + Plasmo HQ, TailwindCSS, `react-icons` (003-popup-ui-redesign)
 
@@ -30,9 +32,9 @@ npm test && npm run lint
 TypeScript 5.x, React 18: Follow standard conventions
 
 ## Recent Changes
+- 012-form-auto-draft: Added TypeScript 5+, React 18 + `@plasmohq/storage/hook`, `react`
 - 009-history-tab: Added TypeScript 5+ + React (Plasmo), TailwindCSS, react-icons
 - 008-auto-detect-source-site: Added TypeScript 5+ + React (Plasmo CSUI), TailwindCSS, react-select, react-icons
-- 007-notification-ok-auto-snooze: Added TypeScript 5+ + React (Plasmo CSUI), TailwindCSS
 
 
 <!-- MANUAL ADDITIONS START -->

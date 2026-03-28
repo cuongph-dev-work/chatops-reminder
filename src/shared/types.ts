@@ -113,6 +113,18 @@ export interface PendingReminderData {
   pageTitle: string
 }
 
+export interface DraftState {
+  editingId?: string
+  title: string
+  description?: string
+  scheduledAt: string
+  messageLink?: string
+  tagIds: string[]
+  preReminderMinutes: 0 | 5 | 10 | 15 | 30
+  recurrence: RecurrenceRule | null
+  lastUpdatedAt: number
+}
+
 export type BackgroundMessage =
   | { type: "CREATE_REMINDER"; payload: CreateReminderPayload }
   | { type: "UPDATE_REMINDER"; payload: UpdateReminderPayload }
